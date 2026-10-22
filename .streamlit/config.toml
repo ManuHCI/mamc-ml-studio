@@ -1,0 +1,21 @@
+[theme]
+base = "light"
+primaryColor = "#7b1c2e"
+backgroundColor = "#fbfaf8"
+secondaryBackgroundColor = "#f4f0ec"
+textColor = "#1f1f1d"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+address = "localhost"
+maxUploadSize = 200
+fileWatcherType = "none"
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = true
+
+[runner]
+magicEnabled = false

@@ -1,0 +1,160 @@
+# Builds the stand-alone editions of MAMC ML Studio (Python and all libraries included) and tests each one:
+#   Windows 10/11 : Setup .exe + portable .zip
+#   macOS 12+     : Apple Silicon .dmg + Intel .dmg
+# Runs on every push to main and from the Actions tab (Run workflow).
+# Push a tag such as v1.0.1 to publish the files as a GitHub Release.
+name: Build installers
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["README.md", "HOW_TO_START.txt"]
+permissions:
+  contents: write
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows 10/11
+    runs-on: windows-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+      - name: Build installer and portable zip
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: python build_tools/build_windows.py
+      - name: Test - install silently
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist\MAMC_ML_Studio_Setup_*.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $exe.FullName -ArgumentList "/S", "/D=C:\mamc_test"
+          foreach ($f in "python\pythonw.exe", "python\python.exe", "app\app.py", "app\desktop_launcher.py", "MAMC ML Studio.exe", "Uninstall.exe", "MAMC ML Studio - User Guide.docx") {
+            if (-not (Test-Path "C:\mamc_test\$f")) { throw "missing after installation: $f" }
+          }
+          if (-not (Test-Path "$env:USERPROFILE\Desktop\MAMC ML Studio.lnk")) { Write-Warning "no desktop shortcut" }
+          Get-Content C:\mamc_test\python\BUNDLED_PYTHON.txt
+      - name: Test - machine-learning engine with the bundled Python
+        run: C:\mamc_test\python\python.exe -X utf8 tests\run_engine_tests.py
+      - name: Test - click through every page of the app
+        run: C:\mamc_test\python\python.exe -X utf8 tests\apptest_flow.py
+      - name: Test - start from "MAMC ML Studio.exe", connect a window, close it, program stops
+        run: python tests\desktop_smoke.py --port 8799 "C:\mamc_test\MAMC ML Studio.exe"
+      - name: Test - portable zip
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist\*_portable.zip | Select-Object -First 1
+          Expand-Archive -Force $zip.FullName C:\mamc_portable
+          python tests\desktop_smoke.py --port 8798 "C:\mamc_portable\MAMC_ML_Studio\MAMC ML Studio.exe"
+          if ($LASTEXITCODE -ne 0) { throw "portable edition failed" }
+      - name: Test - uninstall
+        shell: pwsh
+        run: |
+          Start-Process -Wait -FilePath "C:\mamc_test\Uninstall.exe" -ArgumentList "/S", "_?=C:\mamc_test"
+          if (Test-Path "C:\mamc_test\python") { throw "the uninstaller left the program files" }
+          if (Test-Path "$env:USERPROFILE\Desktop\MAMC ML Studio.lnk") { throw "the uninstaller left the desktop shortcut" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MAMC_ML_Studio_Windows
+          compression-level: 0
+          path: |
+            dist/*.exe
+            dist/*.zip
+
+  mac:
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: AppleSilicon, runner: macos-14 }
+          - { arch: Intel, runner: macos-15-intel }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Build .dmg
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: python build_tools/build_mac.py
+      - name: Test - machine-learning engine with the bundled Python
+        run: |
+          PY="build/mac-$(uname -m)/dmg/MAMC ML Studio.app/Contents/Resources/python/bin/python3"
+          cat "$(dirname "$PY")/../BUNDLED_PYTHON.txt"
+          "$PY" tests/run_engine_tests.py
+      - name: Test - click through every page of the app
+        run: |
+          "build/mac-$(uname -m)/dmg/MAMC ML Studio.app/Contents/Resources/python/bin/python3" tests/apptest_flow.py
+      - name: Test - open the .dmg, start the app from it, connect a window, close it, program stops
+        run: |
+          hdiutil attach dist/*.dmg -nobrowse -readonly -mountpoint /tmp/mlsdmg
+          ls -la /tmp/mlsdmg
+          python tests/desktop_smoke.py --port 8799 "/tmp/mlsdmg/MAMC ML Studio.app/Contents/MacOS/MAMCMLStudio"
+          hdiutil detach /tmp/mlsdmg || true
+      - name: Signature check
+        run: codesign --verify --deep --strict --verbose=2 "build/mac-$(uname -m)/dmg/MAMC ML Studio.app" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MAMC_ML_Studio_macOS_${{ matrix.arch }}
+          compression-level: 0
+          path: dist/*.dmg
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          body: |
+            ## MAMC ML Studio – free, no-code machine learning for medicos
+            Maulana Azad Medical College & Govind Ballabh Pant Hospital, New Delhi
+
+            **Nothing else to install** – Python and every library are inside the download. No internet is needed after downloading. Your data never leave your computer.
+
+            ---
+
+            ### ⚠️ Please read before installing (takes 1 minute)
+            MAMC ML Studio is **safe**, free software made by MAMC faculty. Because it is new and not yet "signed" with a paid Microsoft / Apple certificate, your computer will show a **warning the first time**. This is normal – follow the steps below.
+
+            #### 🪟 Windows – when the blue box "Windows protected your PC" appears
+            1. Click the small underlined words **More info** (just below the message).
+            2. A new button **Run anyway** appears at the bottom – click it.
+            3. Click **Next → I Agree → Install → Finish**. Open **MAMC ML Studio** from the icon on your Desktop.
+
+            > Do **not** click "Don't run" – that cancels the installation.
+            > If your browser (Edge/Chrome) says the file "isn't commonly downloaded", click **⋯** next to the download → **Keep** → **Keep anyway**.
+            > No administrator password is needed.
+
+            #### 🍎 Mac – when it says the app "cannot be opened" or "is from an unidentified developer"
+            1. Open the downloaded **.dmg** and drag **MAMC ML Studio** into **Applications**.
+            2. In Applications, **right-click** (or Control-click) MAMC ML Studio → **Open** → **Open**.
+            3. On macOS 15 or newer, if there is no Open button: click **Done**, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
+
+            > Only if macOS says the app "is damaged": open **Terminal** and paste `xattr -cr "/Applications/MAMC ML Studio.app"`, press Enter, then open the app again.
+
+            ---
+
+            ### Which file do I download? (scroll down to **Assets**)
+            | Your computer | Download this file |
+            |---|---|
+            | Windows 10 / 11 (64-bit) | `MAMC_ML_Studio_Setup_..._Windows10-11.exe` |
+            | Mac with Apple chip (M1–M4) | `MAMC_ML_Studio_..._macOS-AppleSilicon.dmg` |
+            | Intel Mac | `MAMC_ML_Studio_..._macOS-Intel.dmg` |
+            | College PC where you cannot install | `MAMC_ML_Studio_..._Windows_portable.zip` → right-click → **Extract All** → double-click **MAMC ML Studio.exe** |
+
+            Not sure which Mac you have? Apple menu  → **About This Mac** – "Chip: Apple M…" means Apple chip, "Processor: Intel…" means Intel.
+
+            Needs Windows 10 or 11 (64-bit) or macOS 12 Monterey or newer; about 1.5 GB of free disk space and 4 GB RAM.
+            The program opens in its own window after a few seconds; **close the window to quit**. The User Guide (Word) is included.

@@ -1,0 +1,23 @@
+MAMC ML Studio - how to start (Windows)
+=========================================
+
+1. Unzip this file first: right-click the zip > Extract All. (Do not run it from inside the zip.)
+
+2. Python is needed once. If it is not on your computer, install Python 3.12 from
+   https://www.python.org/downloads/  and tick "Add python.exe to PATH" during installation.
+   (Anaconda also works.)
+
+3. Open the extracted folder and double-click  START_MAMC_ML_Studio_Windows.bat
+   - The first start sets everything up: it needs internet and takes about 5-10 minutes.
+     Please keep the black window open.
+   - If Windows shows a security warning, click "More info" > "Run anyway" (or "Run").
+
+4. The software opens in Chrome or Edge. Click "Guided demo" on the home page for a
+   15-minute tour of every step with ready-made data.
+
+5. To stop the software, close the black window. Later starts take a few seconds and
+   work without internet.
+
+User guide (with screenshots):  docs\MAMC_ML_Studio_User_Guide.docx
+
+Everything runs on your own computer - no data are sent anywhere.
