@@ -2,7 +2,8 @@
 #   Windows 10/11 : Setup .exe + portable .zip
 #   macOS 12+     : Apple Silicon .dmg + Intel .dmg
 # Runs on every push to main and from the Actions tab (Run workflow).
-# Push a tag such as v1.0.1 to publish the files as a GitHub Release.
+# To publish: on GitHub open Releases > "Draft a new release", type a new tag such as v1.0.1, click "Publish release".
+# The installers are then built, tested and attached to that release automatically (about 40 minutes).
 name: Build installers
 on:
   workflow_dispatch:
@@ -10,6 +11,8 @@ on:
     branches: [main]
     tags: ["v*"]
     paths-ignore: ["README.md", "HOW_TO_START.txt"]
+  release:
+    types: [published]
 permissions:
   contents: write
 concurrency:
@@ -117,6 +120,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: out/*
+          fail_on_unmatched_files: true
           body: |
             ## MAMC ML Studio – free, no-code machine learning for medicos
             Maulana Azad Medical College & Govind Ballabh Pant Hospital, New Delhi
