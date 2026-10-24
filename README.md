@@ -37,6 +37,11 @@ is from an unidentified developer (right-click the app -> **Open -> Open**; on m
 Security -> **Open Anyway**). This is because the software is not signed with a paid certificate - the release page
 explains each step.
 
+**Windows 11 "Smart App Control":** on new Windows 11 laptops this feature may block the program (Event Viewer shows
+Code Integrity event 3077 for a `.pyd` or `.dll` file). Open Windows Security -> App & browser control -> Smart App
+Control settings -> **Off**, then start MAMC ML Studio again. Smart App Control only allows code signed with a
+certificate from Microsoft's trusted-root programme, and MAMC ML Studio and its libraries are not signed yet.
+
 The installers are built and tested automatically by GitHub Actions (`.github/workflows/build-installers.yml`,
 scripts in `build_tools/`): every edition runs the full engine test, a click-through of every page and a
 start-and-close test before it is published.
